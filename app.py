@@ -358,6 +358,7 @@ with tab_expenses:
             
             st.success(f"Added: {item}")
             # Rerun to reload data from sheet
+            st.session_state.expenses = load_data(selected_occasion)
             st.rerun()
         else:
             st.error("Please fill all fields and select participating families.")
@@ -379,6 +380,7 @@ with tab_expenses:
                 sheet = get_worksheet(selected_occasion)
                 sheet.clear()
                 sheet.append_row(required_cols)
+                st.session_state.expenses = load_data(selected_occasion)
                 st.rerun()
             st.stop()
 
@@ -453,6 +455,7 @@ with tab_expenses:
                         sheet = get_worksheet(selected_occasion)
                         sheet.delete_rows(index + 2)  # +2 accounts for 0-based index and header row
                         st.success("Settlement reverted!")
+                        st.session_state.expenses = load_data(selected_occasion)
                         st.rerun()
             
             # Logic to calculate who pays whom (Greedy Algorithm)
@@ -489,6 +492,7 @@ with tab_expenses:
                         # Record settlement: Payer=Debtor, Split=Equal among [Creditor]
                         sheet.append_row([session_name, f"Settlement: {debtor['fam']} -> {creditor['fam']}", round(amount, 2), debtor['fam'], "By Family (Equal)", json.dumps([creditor['fam']]), ""])
                         st.success("Saved!")
+                        st.session_state.expenses = load_data(selected_occasion)
                         st.rerun()
                 
                 # Adjust remaining amounts
@@ -560,9 +564,10 @@ with tab_expenses:
                 
                 # Delete button
                 if cols[-1].button("🗑️", key=f"del_log_{idx}"):
-                    sheet = get_google_sheet()
+                    sheet = get_worksheet(selected_occasion)
                     sheet.delete_rows(idx + 2) # +2 for 1-based index and header
                     st.success("Deleted!")
+                    st.session_state.expenses = load_data(selected_occasion)
                     st.rerun()
         else:
             st.info("No expenses in this session.")
