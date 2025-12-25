@@ -533,42 +533,41 @@ with tab_expenses:
                             if fam in FAMILIES:
                                 log_df.at[idx, fam] = round(cost_per_person * count, 2)
 
-            # Custom table with Delete buttons
+            # Download Button
+            csv = log_df.to_csv(index=False).encode('utf-8')
+            st.download_button(
+                label="📥 Download CSV",
+                data=csv,
+                file_name=f"{session_name}_expenses.csv",
+                mime="text/csv",
+            )
+
+            # Mobile-friendly Expense Log (Expanders)
             fam_keys = list(FAMILIES.keys())
-            # Define column layout: Item(2), Amount(1), Payer(1), Families...(1 each), Action(0.5)
-            cols_spec = [2, 1, 1] + [1] * len(fam_keys) + [0.5]
             
-            # Header
-            headers = st.columns(cols_spec)
-            headers[0].markdown("**Item**")
-            headers[1].markdown("**Amount**")
-            headers[2].markdown("**Payer**")
-            for i, fam in enumerate(fam_keys):
-                headers[3+i].markdown(f"**{fam}**")
-            headers[-1].markdown("**Del**")
-            
-            # Rows
             for idx, row in log_df.iterrows():
-                cols = st.columns(cols_spec)
-                cols[0].write(row['Item'])
-                cols[1].write(f"${row['Amount']:.2f}")
-                cols[2].write(row['Payer'])
-                
-                # Family shares
-                for i, fam in enumerate(fam_keys):
-                    val = row.get(fam, 0.0)
-                    if val > 0:
-                        cols[3+i].write(f"${val:.2f}")
-                    else:
-                        cols[3+i].write("-")
-                
-                # Delete button
-                if cols[-1].button("🗑️", key=f"del_log_{idx}"):
-                    sheet = get_worksheet(selected_occasion)
-                    sheet.delete_rows(idx + 2) # +2 for 1-based index and header
-                    st.success("Deleted!")
-                    st.session_state.expenses = load_data(selected_occasion)
-                    st.rerun()
+                # Expander Header: Item - $Amount (Payer)
+                label = f"{row['Item']} - ${row['Amount']:.2f} (Paid by {row['Payer']})"
+                with st.expander(label):
+                    st.caption(f"Split: {row['Split']}")
+                    
+                    # Show breakdown of shares
+                    breakdown = []
+                    for fam in fam_keys:
+                        val = row.get(fam, 0.0)
+                        if val > 0:
+                            breakdown.append(f"**{fam}:** \${val:.2f}")
+                    
+                    if breakdown:
+                        st.markdown(" | ".join(breakdown))
+                    
+                    # Delete Action
+                    if st.button("🗑️ Delete Entry", key=f"del_log_{idx}"):
+                        sheet = get_worksheet(selected_occasion)
+                        sheet.delete_rows(idx + 2) # +2 for 1-based index and header
+                        st.success("Deleted!")
+                        st.session_state.expenses = load_data(selected_occasion)
+                        st.rerun()
         else:
             st.info("No expenses in this session.")
 
@@ -610,20 +609,19 @@ if tab_users:
         users_ws = get_users_sheet()
         users_data = users_ws.get_all_records()
         
-        # Custom table with Delete buttons
-        c1, c2, c3, c4 = st.columns([2, 1, 2, 1])
-        c1.markdown("**Username**")
-        c2.markdown("**Role**")
-        c3.markdown("**Family**")
-        c4.markdown("**Action**")
-
+        # Users Table
+        h1, h2, h3, h4 = st.columns([2, 1, 2, 1])
+        h1.markdown("**Username**")
+        h2.markdown("**Role**")
+        h3.markdown("**Family**")
+        h4.markdown("**Action**")
+        
         for i, u in enumerate(users_data):
             c1, c2, c3, c4 = st.columns([2, 1, 2, 1])
             c1.write(str(u['Username']))
             c2.write(str(u['Role']))
             c3.write(str(u['Family']))
             
-            # Prevent deleting the main admin user
             if str(u['Username']) == "admin":
                 c4.write("🔒")
             else:
