@@ -5,11 +5,11 @@ import pandas as pd
 st.set_page_config(page_title="Family Expense Tracker", layout="wide")
 st.title("👪 Family Expense Tally")
 
-# --- DATA INITIALIZATION (In-Memory for now) ---
+# --- DATA INITIALIZATION ---
 if 'expenses' not in st.session_state:
     st.session_state.expenses = []
 
-# Mock Data for Families
+# Mock Data for Families (You can edit these names/counts)
 FAMILIES = {
     "Family A": ["Dad A", "Mom A", "Kid A1"],
     "Family B": ["Dad B", "Mom B", "Kid B1", "Kid B2"],
@@ -33,7 +33,6 @@ with st.expander("➕ Add New Expense", expanded=True):
         
     with col2:
         split_type = st.radio("Split Logic", ["By Family (Equal)", "By Number of People"])
-        # Multi-select for participating families
         participants = st.multiselect("Which families participated?", 
                                      list(FAMILIES.keys()), 
                                      default=list(FAMILIES.keys()))
@@ -49,58 +48,67 @@ with st.expander("➕ Add New Expense", expanded=True):
                 "Participants": participants
             }
             st.session_state.expenses.append(entry)
-            st.success("Expense Added!")
+            st.success(f"Added: {item}")
         else:
             st.error("Please fill all fields.")
 
----
+# Visual separator (Fixed the syntax error here)
+st.divider()
 
 # --- CALCULATION LOGIC ---
 st.header(f"📊 Summary: {session_name}")
 
 if st.session_state.expenses:
-    df = pd.DataFrame(st.session_state.expenses)
-    df = df[df['Session'] == session_name] # Filter by current session
+    # Convert session state to DataFrame
+    all_df = pd.DataFrame(st.session_state.expenses)
+    # Filter by current session
+    df = all_df[all_df['Session'] == session_name].copy()
     
-    st.subheader("Transaction Log")
-    st.dataframe(df, use_container_width=True)
+    if not df.empty:
+        st.subheader("Transaction Log")
+        st.dataframe(df, use_container_width=True)
 
-    # Initialize Tally Dictionary
-    # {FamilyName: [Total Spent, Total Owed]}
-    tally = {fam: {"spent": 0.0, "owed": 0.0} for fam in FAMILIES.keys()}
+        # Initialize Tally Dictionary
+        tally = {fam: {"spent": 0.0, "owed": 0.0} for fam in FAMILIES.keys()}
 
-    for _, row in df.iterrows():
-        # 1. Track who spent money
-        tally[row['Payer']]["spent"] += row['Amount']
-        
-        # 2. Track who owes money based on logic
-        if row['Split'] == "By Family (Equal)":
-            share = row['Amount'] / len(row['Participants'])
-            for f in row['Participants']:
-                tally[f]["owed"] += share
-                
-        else: # By Number of People
-            # Calculate total people across all participating families
-            total_people = sum([len(FAMILIES[f]) for f in row['Participants']])
-            if total_people > 0:
-                cost_per_person = row['Amount'] / total_people
+        for _, row in df.iterrows():
+            # 1. Track who spent money
+            tally[row['Payer']]["spent"] += row['Amount']
+            
+            # 2. Track who owes money based on logic
+            if row['Split'] == "By Family (Equal)":
+                share = row['Amount'] / len(row['Participants'])
                 for f in row['Participants']:
-                    family_share = cost_per_person * len(FAMILIES[f])
-                    tally[f]["owed"] += family_share
+                    tally[f]["owed"] += share
+            else: 
+                # Split By Number of People
+                total_people = sum([len(FAMILIES[f]) for f in row['Participants']])
+                if total_people > 0:
+                    cost_per_person = row['Amount'] / total_people
+                    for f in row['Participants']:
+                        family_share = cost_per_person * len(FAMILIES[f])
+                        tally[f]["owed"] += family_share
 
-    # --- FINAL TALLY TABLE ---
-    summary_data = []
-    for fam, values in tally.items():
-        net = values["spent"] - values["owed"]
-        summary_data.append({
-            "Family": fam,
-            "Total Paid": f"${values['spent']:.2f}",
-            "Share Owed": f"${values['owed']:.2f}",
-            "Balance": f"${net:.2f}",
-            "Status": "Settled" if net == 0 else ("To Receive" if net > 0 else "To Pay")
-        })
+        # --- FINAL TALLY TABLE ---
+        summary_list = []
+        for fam, values in tally.items():
+            net = values["spent"] - values["owed"]
+            summary_list.append({
+                "Family": fam,
+                "Total Paid ($)": round(values['spent'], 2),
+                "Share Owed ($)": round(values['owed'], 2),
+                "Balance ($)": round(net, 2),
+                "Status": "Settled" if abs(net) < 0.01 else ("To Receive" if net > 0 else "To Pay")
+            })
 
-    st.subheader("Final Balances")
-    st.table(pd.DataFrame(summary_data))
+        summary_df = pd.DataFrame(summary_list)
+        st.subheader("Final Balances")
+        st.table(summary_df)
+
+        # Download Button
+        csv = summary_df.to_csv(index=False).encode('utf-8')
+        st.download_button("Download Tally as CSV", csv, f"{session_name}_tally.csv", "text/csv")
+    else:
+        st.info(f"No expenses found for session: {session_name}")
 else:
-    st.info("No expenses added yet for this session.")
+    st.info("Start by adding an expense above.")
