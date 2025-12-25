@@ -9,7 +9,7 @@ st.title("👪 Family Expense Tally")
 if 'expenses' not in st.session_state:
     st.session_state.expenses = []
 
-# Mock Data for Families (You can edit these names/counts)
+# Define your families and their specific members
 FAMILIES = {
     "Family A": ["Dad A", "Mom A", "Kid A1"],
     "Family B": ["Dad B", "Mom B", "Kid B1", "Kid B2"],
@@ -33,63 +33,81 @@ with st.expander("➕ Add New Expense", expanded=True):
         
     with col2:
         split_type = st.radio("Split Logic", ["By Family (Equal)", "By Number of People"])
-        participants = st.multiselect("Which families participated?", 
+        
+        # 1. Select participating families first
+        selected_fams = st.multiselect("Which families participated?", 
                                      list(FAMILIES.keys()), 
                                      default=list(FAMILIES.keys()))
 
+    # 2. If splitting by people, select specific members
+    attendees_by_family = {}
+    if split_type == "By Number of People" and selected_fams:
+        st.write("---")
+        st.write("🔍 **Select specific members present:**")
+        cols = st.columns(len(selected_fams))
+        for i, fam in enumerate(selected_fams):
+            with cols[i]:
+                attendees_by_family[fam] = st.multiselect(
+                    f"{fam}", 
+                    options=FAMILIES[fam], 
+                    default=FAMILIES[fam]
+                )
+
     if st.button("Add Expense"):
-        if item and amount > 0 and participants:
+        if item and amount > 0 and selected_fams:
+            # Logic check: if splitting by people, at least one person must be selected
+            if split_type == "By Number of People":
+                total_attending = sum(len(v) for v in attendees_by_family.values())
+                if total_attending == 0:
+                    st.error("Please select at least one person.")
+                    st.stop()
+            
             entry = {
                 "Session": session_name,
                 "Item": item,
                 "Amount": amount,
                 "Payer": payer_fam,
                 "Split": split_type,
-                "Participants": participants
+                "Families": selected_fams,
+                "Attendees": attendees_by_family if split_type == "By Number of People" else None
             }
             st.session_state.expenses.append(entry)
             st.success(f"Added: {item}")
         else:
-            st.error("Please fill all fields.")
+            st.error("Please fill all fields and select participating families.")
 
-# Visual separator (Fixed the syntax error here)
 st.divider()
 
 # --- CALCULATION LOGIC ---
 st.header(f"📊 Summary: {session_name}")
 
 if st.session_state.expenses:
-    # Convert session state to DataFrame
     all_df = pd.DataFrame(st.session_state.expenses)
-    # Filter by current session
     df = all_df[all_df['Session'] == session_name].copy()
     
     if not df.empty:
-        st.subheader("Transaction Log")
-        st.dataframe(df, use_container_width=True)
-
         # Initialize Tally Dictionary
         tally = {fam: {"spent": 0.0, "owed": 0.0} for fam in FAMILIES.keys()}
 
         for _, row in df.iterrows():
-            # 1. Track who spent money
+            # Track Payer
             tally[row['Payer']]["spent"] += row['Amount']
             
-            # 2. Track who owes money based on logic
+            # Logic A: Equal Family Split
             if row['Split'] == "By Family (Equal)":
-                share = row['Amount'] / len(row['Participants'])
-                for f in row['Participants']:
+                share = row['Amount'] / len(row['Families'])
+                for f in row['Families']:
                     tally[f]["owed"] += share
-            else: 
-                # Split By Number of People
-                total_people = sum([len(FAMILIES[f]) for f in row['Participants']])
-                if total_people > 0:
-                    cost_per_person = row['Amount'] / total_people
-                    for f in row['Participants']:
-                        family_share = cost_per_person * len(FAMILIES[f])
-                        tally[f]["owed"] += family_share
+            
+            # Logic B: Per Person Split (Specific Members)
+            else:
+                total_people_present = sum(len(members) for members in row['Attendees'].values())
+                if total_people_present > 0:
+                    cost_per_person = row['Amount'] / total_people_present
+                    for fam, members in row['Attendees'].items():
+                        tally[fam]["owed"] += cost_per_person * len(members)
 
-        # --- FINAL TALLY TABLE ---
+        # Build Summary Table
         summary_list = []
         for fam, values in tally.items():
             net = values["spent"] - values["owed"]
@@ -102,13 +120,11 @@ if st.session_state.expenses:
             })
 
         summary_df = pd.DataFrame(summary_list)
-        st.subheader("Final Balances")
         st.table(summary_df)
-
-        # Download Button
-        csv = summary_df.to_csv(index=False).encode('utf-8')
-        st.download_button("Download Tally as CSV", csv, f"{session_name}_tally.csv", "text/csv")
+        
+        # Option to clear session
+        if st.button("Delete Last Entry"):
+            st.session_state.expenses.pop()
+            st.rerun()
     else:
-        st.info(f"No expenses found for session: {session_name}")
-else:
-    st.info("Start by adding an expense above.")
+        st.info("No expenses in this session.")
