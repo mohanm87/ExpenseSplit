@@ -609,26 +609,25 @@ if tab_users:
         users_ws = get_users_sheet()
         users_data = users_ws.get_all_records()
         
-        # Users Table
-        h1, h2, h3, h4 = st.columns([2, 1, 2, 1])
-        h1.markdown("**Username**")
-        h2.markdown("**Role**")
-        h3.markdown("**Family**")
-        h4.markdown("**Action**")
-        
+        # Mobile-friendly User List
         for i, u in enumerate(users_data):
-            c1, c2, c3, c4 = st.columns([2, 1, 2, 1])
-            c1.write(str(u['Username']))
-            c2.write(str(u['Role']))
-            c3.write(str(u['Family']))
-            
-            if str(u['Username']) == "admin":
-                c4.write("🔒")
-            else:
-                if c4.button("🗑️", key=f"del_user_{i}"):
-                    users_ws.delete_rows(i + 2)
-                    st.success(f"Deleted {u['Username']}!")
-                    st.rerun()
+            with st.container():
+                c1, c2 = st.columns([3, 1])
+                
+                # User Info
+                info = f"**{u['Username']}**\n\n{u['Role']}"
+                if u['Family']:
+                    info += f" - {u['Family']}"
+                c1.markdown(info)
+                
+                if str(u['Username']) == "admin":
+                    c2.write("🔒")
+                else:
+                    if c2.button("🗑️", key=f"del_user_{i}"):
+                        users_ws.delete_rows(i + 2)
+                        st.success(f"Deleted {u['Username']}!")
+                        st.rerun()
+            st.divider()
         
         st.divider()
         st.subheader("Add New User")
